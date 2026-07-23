@@ -310,7 +310,7 @@ app.get('/:category', async (req: Request, res: Response, next: NextFunction) =>
 initDB().then(async () => {
   await syncStore();
   app.listen(PORT, () => {
-    console.log(`[Server] 随机图片聚合服务已启动: http://localhost:${PORT}`);
+    console.log(`[Server] 漫游星图 (WanderStar Image Pool) 服务已启动: http://localhost:${PORT}`);
     console.log(`[Server] 管理后台: http://localhost:${PORT}/admin`);
     console.log(`[Server] 当前运行环境: ${process.env.NODE_ENV || 'development'}`);
   });

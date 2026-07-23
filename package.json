@@ -1,7 +1,7 @@
 {
-  "name": "rand-pic",
+  "name": "wanderstar-image-pool",
   "version": "1.0.0",
-  "description": "Random Image API Aggregator",
+  "description": "漫游星图 (WanderStar Image Pool) - 高性能随机图片 API 聚合器",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx src/index.ts",
