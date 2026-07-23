@@ -5,18 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>漫游星图 (WanderStar Image Pool) 管理后台</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin/style.css?v=3">
+  <link rel="stylesheet" href="/admin/style.css?v=4">
 </head>
 <body>
   <div id="login-view" class="view-container active">
     <div class="glass-card login-card">
       <div class="login-header">
         <h1>后台登录</h1>
-        <p>请输入管理员密码进入系统</p>
+        <p>请输入管理员账号和密码</p>
       </div>
       <form id="login-form">
         <div class="input-group">
-          <input type="password" id="password" placeholder="Admin Password" required />
+          <input type="text" id="username" placeholder="Username" required />
+        </div>
+        <div class="input-group">
+          <input type="password" id="password" placeholder="Password" required />
         </div>
         <button type="button" id="btn-login" class="btn-primary">进入</button>
         <div id="login-error" class="error-text"></div>
@@ -29,13 +32,12 @@
     <aside class="sidebar glass-panel">
       <div class="sidebar-header">
         <h2>✨ 漫游星图</h2>
-        <span class="badge">Admin</span>
       </div>
       
       <div class="sidebar-section">
         <div class="sidebar-title">
-          <span>分类管理</span>
-          <button id="btn-add-category" class="btn-icon-small" title="新增分类">
+          <span>端点管理</span>
+          <button id="btn-add-category" class="btn-icon-small" title="新增端点">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </button>
         </div>
@@ -53,7 +55,7 @@
           <li class="nav-item">
             <a href="/" target="_blank" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px; width:100%;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              查看对外主页
+              查看前台
             </a>
           </li>
           <li id="btn-logout" class="nav-item text-danger">
@@ -69,17 +71,21 @@
       <div id="panel-category" class="content-panel glass-panel hidden">
         <div class="panel-header">
           <div>
-            <h2 id="manage-cat-title">选择一个分类</h2>
-            <p id="manage-cat-subtitle" class="subtitle">管理该分类下的所有 API</p>
+            <h2 style="display:flex; align-items:center; gap:8px;">
+              <span id="manage-cat-title">选择一个端点</span>
+              <a id="manage-cat-link" href="#" target="_blank" style="font-size:14px; font-weight:normal; color:var(--primary); display:none;"></a>
+            </h2>
           </div>
           <div class="panel-actions">
+            <button id="btn-edit-category" class="btn-secondary">编辑端点</button>
+            <button id="btn-reset-cat-auto" class="btn-secondary">清除自动熔断</button>
+            <button id="btn-reset-cat-manual" class="btn-secondary">清除手动封禁</button>
             <button id="btn-add-api-in-cat" class="btn-primary">+ 添加新 API</button>
-            <button id="btn-delete-cat" class="btn-secondary danger-outline">删除分类</button>
           </div>
         </div>
         <div class="panel-body">
           <div id="manage-cat-apis-list" class="api-management-list">
-            <div class="empty-state">请从左侧选择一个分类进行管理</div>
+            <div class="empty-state">请从左侧选择一个端点进行管理</div>
           </div>
         </div>
       </div>
@@ -87,37 +93,101 @@
       <div id="panel-settings" class="content-panel glass-panel hidden">
         <div class="panel-header">
           <h2>系统设置</h2>
-          <p class="subtitle">配置全局参数与管理员权限</p>
         </div>
         <div class="panel-body">
           
-          <div class="settings-card">
-            <h3>公开域名设置</h3>
-            <p class="settings-desc">设置对外展示的域名，留空则自动获取请求主机的 IP 或域名。示例: https://api.mydomain.com</p>
-            <div class="input-group" style="max-width: 400px; display:flex; gap:12px;">
-              <input type="url" id="input-public-domain" placeholder="https://..." style="flex:1;">
-              <button id="btn-save-domain" class="btn-primary">保存</button>
+          <form id="form-settings">
+            <div class="settings-card">
+              <h3>公开域名设置</h3>
+              <div class="input-group" style="max-width: 400px;">
+                <input type="url" id="setting-public_domain" placeholder="https://..." style="width:100%;">
+              </div>
             </div>
-          </div>
+            
+            <div class="settings-card">
+              <h3>API 请求调度</h3>
+              <div style="display:flex; gap:16px;">
+                <div class="input-group" style="flex:1;">
+                  <label>请求重试次数</label>
+                  <input type="number" id="setting-api_retry_count" min="1" max="10">
+                </div>
+                <div class="input-group" style="flex:1;">
+                  <label>单次超时时间 (ms)</label>
+                  <input type="number" id="setting-api_timeout_ms" min="100" max="10000">
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h3>基础网站配置 (前台)</h3>
+              <div class="input-group">
+                <label>网站名称</label>
+                <input type="text" id="setting-site_name" placeholder="WanderStar Image Pool">
+              </div>
+              <div class="input-group">
+                <label>Logo URL (支持图床链接或 svg 代码)</label>
+                <input type="text" id="setting-site_logo">
+              </div>
+              <div class="input-group">
+                <label>主页显示文本内容</label>
+                <input type="text" id="setting-home_text">
+              </div>
+              <div class="input-group">
+                <label>公告弹窗内容 (支持HTML)</label>
+                <textarea id="setting-announcement" rows="3"></textarea>
+              </div>
+              <div class="input-group">
+                <label>底部版权信息 (支持HTML)</label>
+                <input type="text" id="setting-footer_info">
+              </div>
+              <div class="input-group">
+                <label>背景设置类型</label>
+                <select id="setting-bg_type">
+                  <option value="color">纯色</option>
+                  <option value="gradient">渐变色</option>
+                  <option value="image">图片链接</option>
+                </select>
+              </div>
+              <div class="input-group">
+                <label>背景设置值 (色值/渐变代码/图片URL)</label>
+                <input type="text" id="setting-bg_value" placeholder="#0f172a / linear-gradient(...) / https://...">
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h3>联系页配置</h3>
+              <div class="input-group">
+                <label>联系图片/二维码 URL</label>
+                <input type="text" id="setting-contact_image">
+              </div>
+              <div class="input-group">
+                <label>联系展示文字 (支持HTML)</label>
+                <textarea id="setting-contact_text" rows="3"></textarea>
+              </div>
+              <div class="input-group">
+                <label>社交媒体链接 (JSON数组格式，如 [{"name":"GitHub", "url":"..."}])</label>
+                <textarea id="setting-contact_socials" rows="3"></textarea>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <button type="submit" class="btn-primary" style="width:100px;">保存设置</button>
+            </div>
+          </form>
 
           <div class="settings-card">
-            <h3>运维操作</h3>
-            <div style="display:flex; gap:16px; margin-top:16px;">
-              <button id="btn-reset" class="btn-secondary">一键解封所有自动熔断</button>
-              <button id="btn-reset-manual" class="btn-secondary danger-outline">清除所有手动封禁</button>
-            </div>
-          </div>
-
-          <div class="settings-card">
-            <h3>修改管理员密码</h3>
+            <h3>修改管理员账号与密码</h3>
             <form id="form-change-pwd" style="max-width: 300px; margin-top:16px;">
               <div class="input-group">
-                <input type="password" id="old-pwd" required placeholder="原密码">
+                <input type="text" id="old-username" required placeholder="当前账号">
+              </div>
+              <div class="input-group">
+                <input type="password" id="old-pwd" required placeholder="当前密码">
               </div>
               <div class="input-group">
                 <input type="password" id="new-pwd" required placeholder="新密码">
               </div>
-              <button type="submit" class="btn-primary">修改密码</button>
+              <button type="submit" class="btn-primary">修改</button>
             </form>
           </div>
 
@@ -129,12 +199,24 @@
 
   <div class="modal-overlay" id="modal-add-category">
     <div class="glass-modal">
-      <h3>新增分类</h3>
+      <h3 id="cat-modal-title">新增端点</h3>
       <form id="form-add-category">
+        <input type="hidden" id="cat-is-edit" value="0" />
+        <input type="hidden" id="cat-old-name" value="" />
+        
         <div class="input-group">
-          <label>分类名称 (只允许英文字母，用作URL路径)</label>
-          <input type="text" id="cat-name" placeholder="e.g. pc, mobile, anime" required pattern="[A-Za-z0-9_-]+">
+          <label>端点名称 (中文/英文，如：电脑壁纸)</label>
+          <input type="text" id="cat-display-name" required>
         </div>
+        <div class="input-group">
+          <label>URL Slug (仅英文/数字，如：pc)</label>
+          <input type="text" id="cat-name" placeholder="e.g. pc, mobile" required pattern="[A-Za-z0-9_-]+">
+        </div>
+        <div class="input-group">
+          <label>端点描述 (展示在前台)</label>
+          <textarea id="cat-description" rows="2" placeholder="调用该接口获取随机图片"></textarea>
+        </div>
+        
         <div class="modal-actions">
           <button type="button" class="btn-text btn-close-modal">取消</button>
           <button type="submit" class="btn-primary">保存</button>
@@ -145,13 +227,15 @@
 
   <div class="modal-overlay" id="modal-add-api">
     <div class="glass-modal">
-      <h3>添加新 API</h3>
+      <h3 id="api-modal-title">添加新 API</h3>
       <form id="form-add-api">
         <input type="hidden" id="api-cat-name" />
+        <input type="hidden" id="api-is-edit" value="0" />
+        <input type="hidden" id="api-old-id" value="" />
         
         <div class="input-group">
           <label>API 唯一ID</label>
-          <input type="text" id="api-id" placeholder="e.g. anime-api-1" required>
+          <input type="text" id="api-id" placeholder="e.g. api-1" required>
         </div>
         
         <div class="input-group">
@@ -182,6 +266,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-  <script src="/admin/app.js?v=3"></script>
+  <script src="/admin/app.js?v=4"></script>
 </body>
 </html>

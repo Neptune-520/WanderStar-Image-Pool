@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { getAvailableApis, disableApi, enableAllApis, syncStore, getApiStates, enableApi } from './store';
-import { getCategories, addCategory, deleteCategory, addApi, deleteApi, setApiBanState, clearAllManualBans, verifyPassword, updatePassword, initDB, reorderApis, getSetting, updateSetting } from './dataManager';
+import { getCategories, addCategory, editCategory, deleteCategory, addApi, editApi, deleteApi, setApiBanState, clearAllManualBans, verifyLogin, updatePassword, initDB, reorderApis, getSetting, getAllSettings, updateSetting, updateSettingsBatch } from './dataManager';
 import path from 'path';
 
 const app = express();
@@ -18,12 +18,12 @@ function getNestedValue(obj: any, path: string): any {
 }
 
 app.post('/api/admin/login', async (req: Request, res: Response) => {
-  const { password } = req.body;
-  if (await verifyPassword(password)) {
+  const { username, password } = req.body;
+  if (await verifyLogin(username, password)) {
     const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '24h' });
     return res.json({ token });
   }
-  return res.status(401).json({ error: '密码错误' });
+  return res.status(401).json({ error: '用户名或密码错误' });
 });
 
 function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -55,6 +55,7 @@ adminRouter.get('/data', async (req: Request, res: Response) => {
         if (state && state.isDisabled) {
           api.isFailing = true;
           api.disabledAt = state.disabledAt;
+          api.reason = state.reason;
         } else {
           api.isFailing = false;
         }
@@ -65,18 +66,27 @@ adminRouter.get('/data', async (req: Request, res: Response) => {
 });
 
 adminRouter.post('/category', async (req: Request, res: Response) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: '分类名称不能为空' });
+  const { name, displayName, description } = req.body;
+  if (!name || !name.match(/^[A-Za-z0-9_-]+$/)) return res.status(400).json({ error: '端点 Slug 格式无效' });
   
   if (name === 'admin' || name === 'api') {
-    return res.status(400).json({ error: '保留字，无法作为分类' });
+    return res.status(400).json({ error: '保留字，无法作为端点' });
   }
 
-  if (await addCategory(name)) {
+  if (await addCategory(name, displayName || name, description || '')) {
     await syncStore();
     return res.json({ success: true });
   }
-  return res.status(400).json({ error: '分类已存在' });
+  return res.status(400).json({ error: '端点已存在' });
+});
+
+adminRouter.put('/category/:name', async (req: Request, res: Response) => {
+  const { displayName, description } = req.body;
+  if (await editCategory(req.params.name, displayName, description)) {
+    await syncStore();
+    return res.json({ success: true });
+  }
+  return res.status(400).json({ error: '端点更新失败' });
 });
 
 adminRouter.delete('/category/:name', async (req: Request, res: Response) => {
@@ -84,7 +94,7 @@ adminRouter.delete('/category/:name', async (req: Request, res: Response) => {
     await syncStore();
     return res.json({ success: true });
   }
-  return res.status(404).json({ error: '分类不存在' });
+  return res.status(404).json({ error: '端点不存在' });
 });
 
 adminRouter.post('/api/:category', async (req: Request, res: Response) => {
@@ -97,7 +107,20 @@ adminRouter.post('/api/:category', async (req: Request, res: Response) => {
     await syncStore();
     return res.json({ success: true });
   }
-  return res.status(400).json({ error: '分类不存在或 ID 已存在' });
+  return res.status(400).json({ error: '保存失败，ID 已存在或其它错误' });
+});
+
+adminRouter.put('/api/:category/:id', async (req: Request, res: Response) => {
+  const { category, id: oldId } = req.params;
+  const { id, url, type, jsonPath, isManuallyBanned } = req.body;
+  
+  if (!id || !url || !type) return res.status(400).json({ error: '缺失必填字段' });
+
+  if (await editApi(category, oldId, { id, url, type, jsonPath, isManuallyBanned })) {
+    await syncStore();
+    return res.json({ success: true });
+  }
+  return res.status(400).json({ error: '更新失败' });
 });
 
 adminRouter.delete('/api/:category/:id', async (req: Request, res: Response) => {
@@ -110,16 +133,27 @@ adminRouter.delete('/api/:category/:id', async (req: Request, res: Response) => 
 
 adminRouter.post('/reset', (req: Request, res: Response) => {
   const count = enableAllApis();
-  res.json({ message: `Successfully re-enabled ${count} APIs.` });
+  res.json({ message: `成功解封了 ${count} 个自动熔断 API。` });
+});
+
+adminRouter.post('/reset/:category', (req: Request, res: Response) => {
+  const count = enableAllApis(req.params.category);
+  res.json({ message: `成功解封了 ${count} 个自动熔断 API。` });
 });
 
 adminRouter.post('/reset-manual', async (req: Request, res: Response) => {
   const count = await clearAllManualBans();
   await syncStore();
-  res.json({ message: `Successfully cleared ${count} manual bans.` });
+  res.json({ message: `成功清除了 ${count} 个手动封禁 API。` });
 });
 
-adminRouter.post('/reset/:category/:id', (req: Request, res: Response) => {
+adminRouter.post('/reset-manual/:category', async (req: Request, res: Response) => {
+  const count = await clearAllManualBans(req.params.category);
+  await syncStore();
+  res.json({ message: `成功清除了 ${count} 个手动封禁 API。` });
+});
+
+adminRouter.post('/reset-api/:category/:id', (req: Request, res: Response) => {
   const { category, id } = req.params;
   if (enableApi(category, id)) {
     return res.json({ success: true, message: `已恢复 API: ${id}` });
@@ -139,15 +173,15 @@ adminRouter.post('/toggle-ban/:category/:id', async (req: Request, res: Response
 });
 
 adminRouter.post('/change-password', async (req: Request, res: Response) => {
-  const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) {
-    return res.status(400).json({ error: '缺少密码字段' });
+  const { username, oldPassword, newPassword } = req.body;
+  if (!username || !oldPassword || !newPassword) {
+    return res.status(400).json({ error: '缺少字段' });
   }
-  if (await verifyPassword(oldPassword)) {
+  if (await verifyLogin(username, oldPassword)) {
     await updatePassword(newPassword);
     return res.json({ success: true });
   }
-  return res.status(400).json({ error: '原密码错误' });
+  return res.status(400).json({ error: '原账号或密码错误' });
 });
 
 adminRouter.post('/category/:category/reorder', async (req: Request, res: Response) => {
@@ -165,13 +199,14 @@ adminRouter.post('/category/:category/reorder', async (req: Request, res: Respon
 });
 
 adminRouter.get('/settings', async (req: Request, res: Response) => {
-  const publicDomain = await getSetting('public_domain') || '';
-  res.json({ publicDomain });
+  const settings = await getAllSettings();
+  // Don't send passwords
+  delete settings.admin_password;
+  res.json(settings);
 });
 
 adminRouter.post('/settings', async (req: Request, res: Response) => {
-  const { publicDomain } = req.body;
-  await updateSetting('public_domain', publicDomain || '');
+  await updateSettingsBatch(req.body);
   res.json({ success: true });
 });
 
@@ -181,9 +216,9 @@ app.use(express.static(path.join(process.cwd(), 'public/site')));
 
 app.get('/api/public/config', async (req: Request, res: Response) => {
   const categories = await getCategories();
-  const domainSetting = await getSetting('public_domain');
+  const settings = await getAllSettings();
   
-  let domain = domainSetting;
+  let domain = settings.public_domain;
   if (!domain) {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.headers.host || `localhost:${PORT}`;
@@ -192,9 +227,28 @@ app.get('/api/public/config', async (req: Request, res: Response) => {
   
   domain = domain.replace(/\/$/, '');
 
+  const catsArray = Object.values(categories).map(c => ({
+    name: c.name,
+    displayName: c.displayName,
+    description: c.description,
+    apiCount: c.apis.length
+  }));
+
   res.json({
     domain,
-    categories: Object.keys(categories)
+    categories: catsArray,
+    settings: {
+      site_name: settings.site_name,
+      site_logo: settings.site_logo,
+      home_text: settings.home_text,
+      announcement: settings.announcement,
+      footer_info: settings.footer_info,
+      bg_type: settings.bg_type,
+      bg_value: settings.bg_value,
+      contact_image: settings.contact_image,
+      contact_text: settings.contact_text,
+      contact_socials: settings.contact_socials
+    }
   });
 });
 
@@ -208,90 +262,109 @@ app.get('/:category', async (req: Request, res: Response, next: NextFunction) =>
   const categories = await getCategories();
   
   if (!categories[category]) {
-    return res.status(404).send('分类不存在');
+    return res.status(404).send('端点不存在');
   }
 
   let availableApis = await getAvailableApis(category);
   
   if (availableApis.length === 0) {
     const errorMsg = '当前暂无可用图片服务';
-    if (process.env.NODE_ENV === 'development') {
-      return res.status(503).json({ error: errorMsg, detail: `分类 '${category}' 下的所有配置 API 均已失效或被禁用。` });
-    } else {
-      return res.status(503).json({ error: errorMsg });
-    }
+    return res.status(503).json({ error: errorMsg, detail: `端点 '${category}' 下的所有配置 API 均已失效或被禁用。` });
   }
 
   const apisToTry = availableApis;
   const errors: any[] = [];
+  
+  const timeoutMs = parseInt(await getSetting('api_timeout_ms') || '1500', 10);
+  const maxRetries = parseInt(await getSetting('api_retry_count') || '2', 10);
 
   for (const api of apisToTry) {
-    try {
-      let targetUrl = '';
-      if (api.type === 'direct') {
-        const response = await axios.get(api.url, { 
-          maxRedirects: 0, 
-          timeout: 5000,
-          responseType: 'stream',
-          validateStatus: (status) => status >= 200 && status < 400 
-        });
+    let apiSuccess = false;
+    let lastError: any = null;
+    let targetUrl = '';
 
-        if (response.data && typeof response.data.destroy === 'function') {
-          response.data.destroy(); 
-        }
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (api.type === 'direct') {
+          const response = await axios.get(api.url, { 
+            maxRedirects: 0, 
+            timeout: timeoutMs,
+            responseType: 'stream',
+            validateStatus: (status) => status >= 200 && status < 400 
+          });
 
-        if (response.status >= 300 && response.status < 400 && response.headers.location) {
-          targetUrl = response.headers.location;
-        } else if (response.status === 200) {
-          targetUrl = api.url;
-        } else {
-          throw new Error(`Unexpected status code: ${response.status}`);
-        }
-      } else if (api.type === 'json') {
-        const response = await axios.get(api.url, { timeout: 5000 });
-        const jsonPath = api.jsonPath || 'url';
-        targetUrl = getNestedValue(response.data, jsonPath);
-        
-        if (!targetUrl || typeof targetUrl !== 'string') {
-          throw new Error(`Could not find image URL at path '${jsonPath}' in JSON response.`);
-        }
-      }
-
-      if (targetUrl) {
-        let finalStatus = 200;
-        let contentType = '';
-        try {
-          const headRes = await axios.head(targetUrl, { timeout: 3000, validateStatus: () => true });
-          finalStatus = headRes.status;
-          contentType = headRes.headers['content-type'] || '';
-          
-          if (finalStatus === 405 || finalStatus === 403) {
-            const getRes = await axios.get(targetUrl, { responseType: 'stream', timeout: 3000, validateStatus: () => true });
-            finalStatus = getRes.status;
-            contentType = getRes.headers['content-type'] || '';
-            if (getRes.data && typeof getRes.data.destroy === 'function') getRes.data.destroy();
+          if (response.data && typeof response.data.destroy === 'function') {
+            response.data.destroy(); 
           }
-        } catch (e: any) {
-          throw new Error(`Target URL validation failed: ${e.message}`);
+
+          if (response.status >= 300 && response.status < 400 && response.headers.location) {
+            targetUrl = response.headers.location;
+          } else if (response.status === 200) {
+            targetUrl = api.url;
+          } else {
+            throw new Error(`Unexpected status code: ${response.status}`);
+          }
+        } else if (api.type === 'json') {
+          const response = await axios.get(api.url, { timeout: timeoutMs });
+          const jsonPath = api.jsonPath || 'url';
+          targetUrl = getNestedValue(response.data, jsonPath);
+          
+          if (!targetUrl || typeof targetUrl !== 'string') {
+            throw new Error(`Could not find image URL at path '${jsonPath}' in JSON response.`);
+          }
         }
 
-        if (finalStatus === 404) {
-          throw new Error('Target URL returned 404 Not Found');
+        if (targetUrl) {
+          apiSuccess = true;
+          break;
         }
-        if (finalStatus >= 400) {
-          throw new Error(`Target URL returned error status ${finalStatus}`);
+      } catch (err: any) {
+        lastError = err;
+        if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+          lastError.reason = 'timeout';
+        } else {
+          lastError.reason = 'error';
         }
-        if (contentType.includes('text/html') || contentType.includes('application/json')) {
-          throw new Error(`Target URL is not an image (Content-Type: ${contentType})`);
-        }
+      }
+    }
 
-        return res.redirect(302, targetUrl);
+    if (apiSuccess && targetUrl) {
+      let finalStatus = 200;
+      let contentType = '';
+      try {
+        const headRes = await axios.head(targetUrl, { timeout: timeoutMs, validateStatus: () => true });
+        finalStatus = headRes.status;
+        contentType = headRes.headers['content-type'] || '';
+        
+        if (finalStatus === 405 || finalStatus === 403) {
+          const getRes = await axios.get(targetUrl, { responseType: 'stream', timeout: timeoutMs, validateStatus: () => true });
+          finalStatus = getRes.status;
+          contentType = getRes.headers['content-type'] || '';
+          if (getRes.data && typeof getRes.data.destroy === 'function') getRes.data.destroy();
+        }
+      } catch (e: any) {
+        // Validation failed, but maybe it's just CORS/anti-hotlink on HEAD. We still pass it through if initial API succeeded.
+        finalStatus = 200; 
       }
 
-    } catch (err: any) {
-      console.error(`[Router] API 请求失败 - ${api.id}:`, err.message);
-      disableApi(category, api.id);
-      errors.push({ id: api.id, url: api.url, error: err.message });
+      if (finalStatus === 404 || finalStatus >= 500) {
+        lastError = new Error(`Target URL returned error status ${finalStatus}`);
+        lastError.reason = 'error';
+        apiSuccess = false;
+      } else if (contentType.includes('text/html') || contentType.includes('application/json')) {
+        lastError = new Error(`Target URL is not an image (Content-Type: ${contentType})`);
+        lastError.reason = 'error';
+        apiSuccess = false;
+      }
+    }
+
+    if (apiSuccess && targetUrl) {
+      return res.redirect(302, targetUrl);
+    } else {
+      if (lastError) {
+        disableApi(category, api.id, lastError.reason || 'error');
+        errors.push({ id: api.id, url: api.url, error: lastError.message });
+      }
     }
   }
 
@@ -306,6 +379,8 @@ app.get('/:category', async (req: Request, res: Response, next: NextFunction) =>
     return res.status(502).json({ error: errorMsg });
   }
 });
+
+
 
 initDB().then(async () => {
   await syncStore();

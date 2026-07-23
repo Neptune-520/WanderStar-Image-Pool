@@ -3,6 +3,7 @@ import { getCategories, ApiConfig } from './dataManager';
 interface ApiState {
   isDisabled: boolean;
   disabledAt?: Date;
+  reason?: 'timeout' | 'error';
 }
 
 const apiStates: Record<string, ApiState> = {};
@@ -24,7 +25,7 @@ export function getApiStates() {
 }
 
 export async function getAvailableApis(category: string): Promise<ApiConfig[]> {
-  await syncStore();
+  await syncStore(); // With caching, this is now O(1)
   const categories = await getCategories();
   const catConfig = categories[category];
   if (!catConfig) return [];
@@ -36,11 +37,12 @@ export async function getAvailableApis(category: string): Promise<ApiConfig[]> {
   });
 }
 
-export function disableApi(category: string, id: string) {
+export function disableApi(category: string, id: string, reason: 'timeout' | 'error' = 'error') {
   const key = `${category}_${id}`;
   if (apiStates[key]) {
     apiStates[key].isDisabled = true;
     apiStates[key].disabledAt = new Date();
+    apiStates[key].reason = reason;
   }
 }
 
@@ -49,17 +51,20 @@ export function enableApi(category: string, id: string) {
   if (apiStates[key] && apiStates[key].isDisabled) {
     apiStates[key].isDisabled = false;
     apiStates[key].disabledAt = undefined;
+    apiStates[key].reason = undefined;
     return true;
   }
   return false;
 }
 
-export function enableAllApis(): number {
+export function enableAllApis(categoryName?: string): number {
   let count = 0;
-  for (const id in apiStates) {
-    if (apiStates[id].isDisabled) {
-      apiStates[id].isDisabled = false;
-      apiStates[id].disabledAt = undefined;
+  for (const key in apiStates) {
+    if (categoryName && !key.startsWith(`${categoryName}_`)) continue;
+    if (apiStates[key].isDisabled) {
+      apiStates[key].isDisabled = false;
+      apiStates[key].disabledAt = undefined;
+      apiStates[key].reason = undefined;
       count++;
     }
   }

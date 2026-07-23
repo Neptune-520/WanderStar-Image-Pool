@@ -127,6 +127,44 @@ body {
   color: white;
 }
 
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.top-nav {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+.nav-link {
+  color: var(--text-main);
+  text-decoration: none;
+  font-weight: 500;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.nav-link:hover, .nav-link.active {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.page-view {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+.page-view.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Hero */
 .hero {
   padding: 60px 40px;
@@ -264,4 +302,35 @@ body {
 .toast.show {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.modal-overlay.active {
+  opacity: 1; pointer-events: all;
+}
+.glass-modal {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  padding: 32px;
+  border-radius: 16px;
+  width: 90%; max-width: 500px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  transform: translateY(20px);
+  transition: transform 0.3s ease;
+}
+.modal-overlay.active .glass-modal {
+  transform: translateY(0);
+}
+
+.contact-section {
+  padding: 40px;
 }
