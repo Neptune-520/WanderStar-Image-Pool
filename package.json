@@ -1,0 +1,27 @@
+{
+  "name": "rand-pic",
+  "version": "1.0.0",
+  "description": "Random Image API Aggregator",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.18.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.1.1",
+    "@types/sqlite3": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}
