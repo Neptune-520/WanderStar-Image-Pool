@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  wanderstar:
+    build: .
+    container_name: wanderstar_api
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data.sqlite:/app/data.sqlite
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
