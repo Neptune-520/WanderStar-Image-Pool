@@ -82,7 +82,7 @@ adminRouter.post('/category', async (req: Request, res: Response) => {
 
 adminRouter.put('/category/:name', async (req: Request, res: Response) => {
   const { displayName, description } = req.body;
-  if (await editCategory(req.params.name, displayName, description)) {
+  if (await editCategory(req.params.name as string, displayName, description)) {
     await syncStore();
     return res.json({ success: true });
   }
@@ -90,7 +90,7 @@ adminRouter.put('/category/:name', async (req: Request, res: Response) => {
 });
 
 adminRouter.delete('/category/:name', async (req: Request, res: Response) => {
-  if (await deleteCategory(req.params.name)) {
+  if (await deleteCategory(req.params.name as string)) {
     await syncStore();
     return res.json({ success: true });
   }
@@ -98,7 +98,7 @@ adminRouter.delete('/category/:name', async (req: Request, res: Response) => {
 });
 
 adminRouter.post('/api/:category', async (req: Request, res: Response) => {
-  const { category } = req.params;
+  const category = req.params.category as string;
   const { id, url, type, jsonPath } = req.body;
   
   if (!id || !url || !type) return res.status(400).json({ error: '缺失必填字段' });
@@ -111,7 +111,8 @@ adminRouter.post('/api/:category', async (req: Request, res: Response) => {
 });
 
 adminRouter.put('/api/:category/:id', async (req: Request, res: Response) => {
-  const { category, id: oldId } = req.params;
+  const category = req.params.category as string;
+  const oldId = req.params.id as string;
   const { id, url, type, jsonPath, isManuallyBanned } = req.body;
   
   if (!id || !url || !type) return res.status(400).json({ error: '缺失必填字段' });
@@ -124,7 +125,7 @@ adminRouter.put('/api/:category/:id', async (req: Request, res: Response) => {
 });
 
 adminRouter.delete('/api/:category/:id', async (req: Request, res: Response) => {
-  if (await deleteApi(req.params.category, req.params.id)) {
+  if (await deleteApi(req.params.category as string, req.params.id as string)) {
     await syncStore();
     return res.json({ success: true });
   }
@@ -137,7 +138,7 @@ adminRouter.post('/reset', (req: Request, res: Response) => {
 });
 
 adminRouter.post('/reset/:category', (req: Request, res: Response) => {
-  const count = enableAllApis(req.params.category);
+  const count = enableAllApis(req.params.category as string);
   res.json({ message: `成功解封了 ${count} 个自动熔断 API。` });
 });
 
@@ -148,13 +149,14 @@ adminRouter.post('/reset-manual', async (req: Request, res: Response) => {
 });
 
 adminRouter.post('/reset-manual/:category', async (req: Request, res: Response) => {
-  const count = await clearAllManualBans(req.params.category);
+  const count = await clearAllManualBans(req.params.category as string);
   await syncStore();
   res.json({ message: `成功清除了 ${count} 个手动封禁 API。` });
 });
 
 adminRouter.post('/reset-api/:category/:id', (req: Request, res: Response) => {
-  const { category, id } = req.params;
+  const category = req.params.category as string;
+  const id = req.params.id as string;
   if (enableApi(category, id)) {
     return res.json({ success: true, message: `已恢复 API: ${id}` });
   }
@@ -162,7 +164,8 @@ adminRouter.post('/reset-api/:category/:id', (req: Request, res: Response) => {
 });
 
 adminRouter.post('/toggle-ban/:category/:id', async (req: Request, res: Response) => {
-  const { category, id } = req.params;
+  const category = req.params.category as string;
+  const id = req.params.id as string;
   const { isBanned } = req.body;
   
   if (await setApiBanState(category, id, Boolean(isBanned))) {
@@ -185,7 +188,7 @@ adminRouter.post('/change-password', async (req: Request, res: Response) => {
 });
 
 adminRouter.post('/category/:category/reorder', async (req: Request, res: Response) => {
-  const { category } = req.params;
+  const category = req.params.category as string;
   const { apiIds } = req.body;
   if (!Array.isArray(apiIds)) {
     return res.status(400).json({ error: '无效的数据格式' });
@@ -253,7 +256,7 @@ app.get('/api/public/config', async (req: Request, res: Response) => {
 });
 
 app.get('/:category', async (req: Request, res: Response, next: NextFunction) => {
-  const { category } = req.params;
+  const category = req.params.category as string;
   
   if (category === 'admin' || category === 'api') {
     return next();
@@ -334,12 +337,12 @@ app.get('/:category', async (req: Request, res: Response, next: NextFunction) =>
       try {
         const headRes = await axios.head(targetUrl, { timeout: timeoutMs, validateStatus: () => true });
         finalStatus = headRes.status;
-        contentType = headRes.headers['content-type'] || '';
+        contentType = String(headRes.headers['content-type'] || '');
         
         if (finalStatus === 405 || finalStatus === 403) {
           const getRes = await axios.get(targetUrl, { responseType: 'stream', timeout: timeoutMs, validateStatus: () => true });
           finalStatus = getRes.status;
-          contentType = getRes.headers['content-type'] || '';
+          contentType = String(getRes.headers['content-type'] || '');
           if (getRes.data && typeof getRes.data.destroy === 'function') getRes.data.destroy();
         }
       } catch (e: any) {
